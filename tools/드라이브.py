@@ -50,16 +50,21 @@ def 열쇠():
     몸 = {'refresh_token': os.environ['GDRIVE_REFRESH_TOKEN'], 'grant_type': 'refresh_token'}
     if os.environ.get('GDRIVE_CLIENT_SECRET'):
         몸.update(client_id=os.environ.get('GDRIVE_CLIENT_ID', ''), client_secret=os.environ['GDRIVE_CLIENT_SECRET'])
-    try:
-        with urllib.request.urlopen('https://oauth2.googleapis.com/token', urllib.parse.urlencode(몸).encode(), timeout=60) as r:
-            return json.load(r)['access_token']
-    except urllib.error.HTTPError as e:
-        글 = e.read()[:300].decode('utf-8', 'replace')
-        if 'invalid_grant' in 글:
-            raise SystemExit('✗ 열쇠가 끊겼다(7일 지남 또는 취소됨) — OAuth Playground 에서 Refresh token 을 다시 받아야 한다\n  ' + 글)
-        if 'invalid_client' in 글 or 'client_secret' in 글:
-            raise SystemExit('✗ 보안 비밀번호가 안 실렸다 — 「API 자격 증명」(oauth2.googleapis.com, Basic) 을 확인\n  ' + 글)
-        raise
+    # 노트북·PC 에 이어진 세션은 oauth2.googleapis.com 이 막힌다 — 그때는 같은 일을 하는 옛 주소로 다시 묻는다
+    주소들 = ['https://oauth2.googleapis.com/token', 'https://accounts.google.com/o/oauth2/token']
+    for 주소 in 주소들:
+        try:
+            with urllib.request.urlopen(주소, urllib.parse.urlencode(몸).encode(), timeout=60) as r:
+                return json.load(r)['access_token']
+        except urllib.error.HTTPError as e:
+            글 = e.read()[:300].decode('utf-8', 'replace')
+            if e.code == 403 and 'request blocked' in 글.lower() and 주소 != 주소들[-1]:
+                continue
+            if 'invalid_grant' in 글:
+                raise SystemExit('✗ 열쇠가 끊겼다(7일 지남 또는 취소됨) — OAuth Playground 에서 Refresh token 을 다시 받아야 한다\n  ' + 글)
+            if 'invalid_client' in 글 or 'client_secret' in 글:
+                raise SystemExit('✗ 보안 비밀번호가 안 실렸다 — 「API 자격 증명」(oauth2.googleapis.com, Basic) 을 확인\n  ' + 글)
+            raise SystemExit(f'✗ 열쇠를 못 바꿨다 ({주소}, {e.code})\n  ' + 글)
 
 
 class 드라이브:
