@@ -8,8 +8,9 @@
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
 
-열쇠 — 환경변수 GDRIVE_REFRESH_TOKEN + 보안 비밀번호(환경의 「API 자격 증명」 이 oauth2.googleapis.com 에 Basic 으로 붙인다,
-또는 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET). 사용자 본인 계정의 열쇠라 새 파일도 사용자 소유로 생긴다.
+열쇠 — 클라우드 환경 「Default」 의 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET · GDRIVE_REFRESH_TOKEN.
+(보안 비밀번호를 환경변수 대신 「API 자격 증명」 Basic 머리글로 붙여도 돈다.) 다시 세우는 법: 드라이브 00_길잡이/클라우드_드라이브연결/
+사용자 본인 계정의 열쇠라 새 파일도 사용자 소유로 생긴다.
 
 ⚠ 지우지 않는다 — 드라이브에서도, 이 컴퓨터에서도. 바뀐 파일은 드라이브의 「버전」 에 옛 판이 남는다.
 ⚠ 받은 뒤 드라이브 쪽이 따로 바뀌었으면 그 파일은 올리지 않고 멈춘다 (덮어쓰기 막음).
