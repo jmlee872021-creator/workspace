@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -114,6 +115,7 @@ class 드라이브:
                             f.write(b)
             except (urllib.error.URLError, OSError) as e:
                 print('  · 끊김 (%s) — 이어 받는다: %s' % (e, 길), flush=True)
+                time.sleep(2 ** 번)   #: 드라이브 「분당 요청 한도」 에 걸렸을 때도 숨을 고른다
             if not 크기:
                 break
         받음 = os.path.getsize(임) if os.path.exists(임) else 0
