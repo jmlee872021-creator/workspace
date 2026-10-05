@@ -9,5 +9,5 @@ echo 'export JAKIN_DIR="$HOME/Jakin_workspace"' >> "${CLAUDE_ENV_FILE:-/dev/null
 if [ -n "${GDRIVE_REFRESH_TOKEN:-}" ]; then
   echo "드라이브 열쇠 있음 — python3 tools/드라이브.py 받기 <폴더> 로 Jakin_workspace 를 받는다"
 else
-  echo "드라이브 열쇠 없음 — tools/드라이브.py 는 GDRIVE_REFRESH_TOKEN(+ API 자격 증명) 이 있어야 돈다"
+  echo "드라이브 열쇠 없음 — tools/드라이브.py 는 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET · GDRIVE_REFRESH_TOKEN 이 있어야 돈다"
 fi
