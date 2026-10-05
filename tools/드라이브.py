@@ -4,6 +4,7 @@
     python3 tools/드라이브.py 받기                         뿌리 전체 (큰 파일ㆍ되돌림 사본은 뺀다)
     python3 tools/드라이브.py 받기 02_프로젝트/system_만들기  그 폴더만
     python3 tools/드라이브.py 받기 --큰것 10_Ai/1_법DB/법.db  큰 파일도 이름을 대면 받는다
+    python3 tools/드라이브.py 받기 10_Ai/2_묻고답하기 --꼴 "*.md"   그 꼴의 파일만
     python3 tools/드라이브.py 견주기                       받은 뒤 바뀐 것ㆍ새로 생긴 것만 보인다 (아무것도 안 올린다)
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
@@ -22,6 +23,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,7 +35,8 @@ import urllib.request
 API = 'https://www.googleapis.com/drive/v3/files'
 올림API = 'https://www.googleapis.com/upload/drive/v3/files'
 #: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
-뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름]
+뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름, 목록이름 + '.*',
+       '.매뉴얼색인.db*', '.법준비됨']   #: 이 컴퓨터에서만 쓰는 것 — 올리지 않는다
 큰것MB = 300
 
 
@@ -88,19 +91,45 @@ class 드라이브:
             if not 쪽:
                 return 파일
 
-    def 받기(self, fid, 길):
+    def 받기(self, fid, 길, 크기=None, 지문=None):
+        """끊기면 받은 데까지 이어 받는다 (Range).  크기ㆍmd5 가 드라이브와 맞아야 제자리에 놓는다.
+
+        연결이 중간에 끊겨도 read() 가 빈 값을 주며 조용히 끝날 수 있다 —
+        그래서 「다 받았다」 는 크기와 md5 로만 판단한다.
+        """
         os.makedirs(os.path.dirname(길), exist_ok=True)
         임 = 길 + '.받는중'
-        with self.부름('%s/%s?alt=media' % (API, fid)) as r, open(임, 'wb') as f:
-            while True:
-                b = r.read(1 << 20)
-                if not b:
-                    break
-                f.write(b)
+        if os.path.exists(임):
+            os.remove(임)
+        for 번 in range(6):
+            있음 = os.path.getsize(임) if os.path.exists(임) else 0
+            if 크기 and 있음 >= 크기:
+                break
+            try:
+                머리 = {'Range': 'bytes=%d-' % 있음} if 있음 else None
+                with self.부름('%s/%s?alt=media' % (API, fid), 머리=머리) as r:
+                    #: 서버가 Range 를 무시하고 처음부터 주면(200) 덮어쓴다
+                    with open(임, 'ab' if 있음 and r.status == 206 else 'wb') as f:
+                        while True:
+                            b = r.read(1 << 20)
+                            if not b:
+                                break
+                            f.write(b)
+            except (urllib.error.URLError, OSError) as e:
+                print('  · 끊김 (%s) — 이어 받는다: %s' % (e, 길), flush=True)
+                time.sleep(2 ** 번)   #: 드라이브 「분당 요청 한도」 에 걸렸을 때도 숨을 고른다
+            if not 크기:
+                break
+        받음 = os.path.getsize(임) if os.path.exists(임) else 0
+        if 크기 and 받음 != 크기:
+            raise SystemExit('✗ 다 못 받음 (%d / %d 바이트): %s' % (받음, 크기, 길))
+        if 지문 and md5(임) != 지문:
+            os.remove(임)
+            raise SystemExit('✗ md5 가 드라이브와 다르다 — 받은 것을 버렸다: %s' % 길)
         os.replace(임, 길)
 
     def 정보(self, fid):
-        with self.부름('%s/%s?fields=id,md5Checksum,modifiedTime' % (API, fid)) as r:
+        with self.부름('%s/%s?fields=id,md5Checksum,modifiedTime,size' % (API, fid)) as r:
             return json.load(r)
 
     def 올리기(self, 길, fid=None, 부모=None):
@@ -143,9 +172,18 @@ def 목록읽기():
 
 
 def 목록쓰기(m):
+    """받기 둘이 함께 돌아도 서로의 줄을 지우지 않게 — 잠그고, 그새 쓰인 목록과 합쳐 쓴다"""
+    import fcntl
     os.makedirs(여기, exist_ok=True)
-    with open(os.path.join(여기, 목록이름), 'w', encoding='utf-8') as f:
-        json.dump(m, f, ensure_ascii=False, indent=0)
+    길 = os.path.join(여기, 목록이름)
+    with open(길 + '.잠금', 'w') as 잠금:
+        fcntl.flock(잠금, fcntl.LOCK_EX)
+        지금 = 목록읽기()
+        for 칸 in ('파일', '폴더'):
+            지금[칸].update(m[칸])
+        with open(길 + '.쓰는중', 'w', encoding='utf-8') as f:
+            json.dump(지금, f, ensure_ascii=False, indent=0)
+        os.replace(길 + '.쓰는중', 길)
 
 
 def 경로id(d, m, 상대):
@@ -185,6 +223,8 @@ def 받기(args):
                 넣기(x, 길)
 
     def 넣기(x, 길):
+        if args.꼴 and not any(fnmatch.fnmatch(os.path.basename(길), p) for p in args.꼴):
+            return
         크기 = int(x.get('size') or 0)
         if 크기 > 큰것MB * 2 ** 20 and not args.큰것:
             큰것뺌.append((길, 크기))
@@ -205,14 +245,14 @@ def 받기(args):
             훑기(x, 상대)
         else:
             if isinstance(x, str):
-                x = dict(d.정보(x), id=x, name=os.path.basename(상대), size=0)
+                x = dict(d.정보(x), id=x, name=os.path.basename(상대))
             넣기(x, 상대)
 
     print('받을 것 %d개 …' % len(할일), flush=True)
 
     def 하나(일):
         x, 길 = 일
-        d.받기(x['id'], os.path.join(여기, 길))
+        d.받기(x['id'], os.path.join(여기, 길), int(x.get('size') or 0) or None, x.get('md5Checksum'))
         return 길, {'id': x['id'], 'md5': x.get('md5Checksum'), '때': x['modifiedTime']}
 
     with concurrent.futures.ThreadPoolExecutor(8) as 일꾼:
@@ -295,6 +335,7 @@ def main():
     b.add_argument('경로', nargs='*')
     b.add_argument('--큰것', action='store_true', help='%dMB 넘는 파일도 받는다' % 큰것MB)
     b.add_argument('--전부', action='store_true', help='되돌림 사본 등 빼던 것도 받는다')
+    b.add_argument('--꼴', nargs='+', metavar='꼴', help='이 꼴의 파일만 받는다 (보기: --꼴 "*.yaml" "*.md")')
     sp.add_parser('견주기')
     o = sp.add_parser('올리기')
     o.add_argument('--정말', action='store_true')
