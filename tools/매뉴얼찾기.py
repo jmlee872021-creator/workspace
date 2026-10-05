@@ -3,7 +3,8 @@
 
     python3 tools/매뉴얼찾기.py 조경 면적                 낱말이 모두 든 항목ㆍQ (점수 차례)
     python3 tools/매뉴얼찾기.py 정북 일조 --몇 5
-    python3 tools/매뉴얼찾기.py 용도변경 --갈래 용도변경    갈래만 (한국건축규정ㆍ용도변경ㆍ요소별ㆍ법률해설ㆍ문답)
+    python3 tools/매뉴얼찾기.py 용도변경 --갈래 용도변경    갈래만 (한국건축규정ㆍ용도변경ㆍ요소별ㆍ법률해설ㆍ문답ㆍ질의회신)
+    python3 tools/매뉴얼찾기.py 무창층 제연 --갈래 질의회신  국토부ㆍ서울시ㆍ소방청 질의회신집에서만
     python3 tools/매뉴얼찾기.py --보기 3                    그 번호 항목을 통째로
     python3 tools/매뉴얼찾기.py --짓기                      색인을 새로 짓는다 (정본이 바뀌면 저절로도 짓는다)
 
@@ -33,6 +34,9 @@ import yaml
     ('요소별', '10_Ai/10_업무매뉴얼/13_요소별_설계기준/*.yaml'),
     ('법률해설', '10_Ai/10_업무매뉴얼/11_법률검토/*/*.yaml'),
     ('문답', '10_Ai/2_묻고답하기/*.md'),
+    #: 질의회신집 — 국토부ㆍ서울시ㆍ소방청이 낸 회신. 법.db 해석례(법제처)보다 실무에 가깝다.  인용할 때는 「질의회신(유권해석 아님)」
+    ('질의회신', '10_Ai/10_업무매뉴얼/사용자폴더_건축법 메뉴얼 작성용 참고자료/*회신*.pdf'),
+    ('질의회신', '10_Ai/10_업무매뉴얼/원본/공공기관_안내문/소방청 인허가 자료/*질의회신집.pdf'),
 ]
 조각한도 = 3000      #: 이보다 긴 덩어리는 아래로 나눈다
 제목칸 = ('번호', '이름', '장', '제목', '기준', '체크항목', '머리', '풀이', '글')
@@ -107,6 +111,44 @@ def md조각(글):
         yield 마디[i], 첫줄[:120], 몸
 
 
+#: 질의 머리 — 서울시 「질 의」 · 국토부 「질의」 · 소방청 「질의 2」 (한 줄에 그것만)
+질의꼴 = re.compile(r'(?m)^[ \t]*질[ \t]?의(?:[ \t]*\d+)?[ \t]*$')
+쪽머리꼴 = re.compile(r'^[\s\d\-–ⅠⅡⅢⅣⅤⅥⅦⅧ|.▸]*$')
+
+
+def pdf조각(길):
+    """질의회신집 — 질의 하나가 한 조각.  제목은 질의 머리 바로 위 두 줄 · 자리는 그 질의가 시작하는 쪽"""
+    import pymupdf
+    쪽글 = [쪽.get_text() for 쪽 in pymupdf.open(길)]
+    글 = ''.join(쪽글)
+    쪽시작 = []
+    n = 0
+    for s in 쪽글:
+        쪽시작.append(n)
+        n += len(s)
+    머리들 = [m.start() for m in 질의꼴.finditer(글)]
+    if not 머리들:
+        return
+    import bisect
+
+    def 앞줄(i, 몇=2):
+        줄 = [x.strip() for x in 글[max(0, i - 400):i].split('\n')]
+        줄 = [x for x in 줄 if x and not 쪽머리꼴.match(x)]
+        return 줄[-몇:]
+    #: 조각의 처음 = 제목 줄(질의 머리 위 두 줄)이 시작하는 곳
+    처음들 = []
+    for i in 머리들:
+        줄 = 앞줄(i)
+        처음들.append(글.rfind(줄[0], max(0, i - 400), i) if 줄 else i)
+    for k, i in enumerate(머리들):
+        끝 = 처음들[k + 1] if k + 1 < len(처음들) else len(글)
+        몸 = 글[처음들[k]:끝]
+        if '회' not in 몸:
+            continue
+        쪽 = bisect.bisect_right(쪽시작, i)
+        yield '%d쪽' % 쪽, ' '.join(앞줄(i))[:120], 몸
+
+
 def 정본들():
     for 갈래, 꼴 in 자리들:
         for 길 in sorted(glob.glob(os.path.join(뿌리, 꼴), recursive=True)):
@@ -123,8 +165,11 @@ def 짓기():
     n = 0
     for 갈래, 길 in 정본들():
         상대 = os.path.relpath(길, 뿌리)
-        글 = open(길, encoding='utf-8').read()
-        if 길.endswith('.md'):
+        글 = '' if 길.endswith('.pdf') else open(길, encoding='utf-8').read()
+        if 길.endswith('.pdf'):
+            조각들 = pdf조각(길)
+            장 = 상대
+        elif 길.endswith('.md'):
             조각들 = md조각(글)
             장 = 상대
         else:
@@ -182,7 +227,7 @@ def 찾기(낱말들, 몇, 갈래=None):
     print('「%s」 — 매뉴얼ㆍ문답 %d곳%s' % (' '.join(낱말들), len(줄들), ' (위 %d곳)' % 몇 if len(줄들) > 몇 else ''))
     for 번, 갈래, 장, 자리, 제목, 본문, 열쇠 in 줄들[:몇]:
         print('\n[%d] %s · %s' % (번, 갈래, 제목))
-        print('    장: %s%s' % (장, '  ' + 자리 if 자리 and 갈래 == '문답' else ''))
+        print('    장: %s%s' % (장, '  ' + 자리 if 자리 and 갈래 in ('문답', '질의회신') else ''))
         if 열쇠:
             k = 열쇠.split('\n')
             print('    조문: %s%s' % (' · '.join(k[:8]), ' 외 %d' % (len(k) - 8) if len(k) > 8 else ''))
