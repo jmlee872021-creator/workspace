@@ -37,7 +37,8 @@ API = 'https://www.googleapis.com/drive/v3/files'
 올림API = 'https://www.googleapis.com/upload/drive/v3/files'
 #: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
 뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름, 목록이름 + '.*',
-       '.매뉴얼색인.db*', '.법준비됨']   #: 이 컴퓨터에서만 쓰는 것 — 올리지 않는다
+       '.매뉴얼색인.db*', '.법준비됨',
+       '*.db-shm', '*.db-wal', '*.db-journal']   #: 이 컴퓨터에서만 쓰는 것 — 올리지 않는다 (db 를 열면 곁에 생기는 임시 파일도)
 큰것MB = 300
 #: `받기 --글만` 이 빼는 꼴 — 도구ㆍ매뉴얼 글(html·js·json·yaml·md·py·csv·db …)만 받으면 파일 수가 1/4 로 준다
 글아닌것 = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.webp', '.heic', '.pdf', '.hwp', '.hwpx',
