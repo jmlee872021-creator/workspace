@@ -115,9 +115,8 @@ def 정본들():
 
 def 짓기():
     t = time.time()
-    임 = 색인길 + '.짓는중'
-    if os.path.exists(임):
-        os.remove(임)
+    #: 짓는 이마다 따로 — 법준비.sh 가 짓는 중에 물음이 와 둘이 함께 지으면 한 이름을 서로 지워 `disk I/O error` 가 났다 (2026-10-05)
+    임 = '%s.짓는중%d' % (색인길, os.getpid())
     c = sqlite3.connect(임)
     c.execute('create table 조각(번 integer primary key, 갈래, 파일, 자리, 제목, 본문, 열쇠, 장)')
     c.execute('create table 판(파일 primary key, 때)')
