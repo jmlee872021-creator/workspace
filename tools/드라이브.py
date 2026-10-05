@@ -4,6 +4,7 @@
     python3 tools/드라이브.py 받기                         뿌리 전체 (큰 파일ㆍ되돌림 사본은 뺀다)
     python3 tools/드라이브.py 받기 02_프로젝트/system_만들기  그 폴더만
     python3 tools/드라이브.py 받기 --큰것 10_Ai/1_법DB/법.db  큰 파일도 이름을 대면 받는다
+    python3 tools/드라이브.py 받기 10_Ai/2_묻고답하기 --꼴 "*.md"   그 꼴의 파일만
     python3 tools/드라이브.py 견주기                       받은 뒤 바뀐 것ㆍ새로 생긴 것만 보인다 (아무것도 안 올린다)
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
@@ -34,7 +35,8 @@ import urllib.request
 API = 'https://www.googleapis.com/drive/v3/files'
 올림API = 'https://www.googleapis.com/upload/drive/v3/files'
 #: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
-뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름]
+뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름, 목록이름 + '.*',
+       '.매뉴얼색인.db*', '.법준비됨']   #: 이 컴퓨터에서만 쓰는 것 — 올리지 않는다
 큰것MB = 300
 
 
@@ -170,9 +172,18 @@ def 목록읽기():
 
 
 def 목록쓰기(m):
+    """받기 둘이 함께 돌아도 서로의 줄을 지우지 않게 — 잠그고, 그새 쓰인 목록과 합쳐 쓴다"""
+    import fcntl
     os.makedirs(여기, exist_ok=True)
-    with open(os.path.join(여기, 목록이름), 'w', encoding='utf-8') as f:
-        json.dump(m, f, ensure_ascii=False, indent=0)
+    길 = os.path.join(여기, 목록이름)
+    with open(길 + '.잠금', 'w') as 잠금:
+        fcntl.flock(잠금, fcntl.LOCK_EX)
+        지금 = 목록읽기()
+        for 칸 in ('파일', '폴더'):
+            지금[칸].update(m[칸])
+        with open(길 + '.쓰는중', 'w', encoding='utf-8') as f:
+            json.dump(지금, f, ensure_ascii=False, indent=0)
+        os.replace(길 + '.쓰는중', 길)
 
 
 def 경로id(d, m, 상대):
@@ -212,6 +223,8 @@ def 받기(args):
                 넣기(x, 길)
 
     def 넣기(x, 길):
+        if args.꼴 and not any(fnmatch.fnmatch(os.path.basename(길), p) for p in args.꼴):
+            return
         크기 = int(x.get('size') or 0)
         if 크기 > 큰것MB * 2 ** 20 and not args.큰것:
             큰것뺌.append((길, 크기))
@@ -322,6 +335,7 @@ def main():
     b.add_argument('경로', nargs='*')
     b.add_argument('--큰것', action='store_true', help='%dMB 넘는 파일도 받는다' % 큰것MB)
     b.add_argument('--전부', action='store_true', help='되돌림 사본 등 빼던 것도 받는다')
+    b.add_argument('--꼴', nargs='+', metavar='꼴', help='이 꼴의 파일만 받는다 (보기: --꼴 "*.yaml" "*.md")')
     sp.add_parser('견주기')
     o = sp.add_parser('올리기')
     o.add_argument('--정말', action='store_true')
