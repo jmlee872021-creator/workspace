@@ -4,6 +4,7 @@
     (훅)  Stop 때 마지막 답을 읽는다. 법률 문답 답(맨 끝 `법.db 기준:` 줄)일 때만 잰다
     python3 .claude/hooks/법답대조.py --자가검사      법답케이스.yaml 의 답마다 걸려야 할 것이 걸리나
     python3 .claude/hooks/법답대조.py < 답.md        답 하나를 잰다 (표준입력)
+    python3 .claude/hooks/법답대조.py --물음 "<물음>" < 답.md     ⑥ 까지 (물음이 있어야 잰다)
 
 재는 것 — 결론ㆍ단서 자리(첫 `◆` 앞)만:
   ① 「다.」 로 끝나는 문장마다 `← 「원문 글귀」` 가 붙었나
@@ -11,6 +12,8 @@
   ③ 「안전하다」 「타당하다」 「권장」 「바람직」 같은 판단 말이 섞였나 — 그 말은 「실무 조언(법 판단 아님)」 에만
   ④ 근거(◆)가 하나라도 있나
   ⑤ 근거 인용(`> …`)이 그 법령의 법.db 원문에 글자 그대로 있나 — 법답원문.py (법.db 가 없으면 건너뛴다)
+  ⑥ 특정 건물을 두고 물었는데(「우리 건물」 「이 건물」 …) 첫 결론이 사실로 갈리면(「~이면 …, ~이면 …」 「가른다」)
+     — 답하지 말고 그 사실부터 묻는다 (CLAUDE.md 「법률 문답」 1 ⓪ · 2026-10-05 사용자)
 
 걸리면 Stop 을 막고(exit 2) 걸린 줄을 알린다 — 고쳐서 다시 낸다. 한 번 막은 뒤(stop_hook_active)에는 막지 않고 알리기만 한다.
 ⚠ ①②는 「글귀가 답 안의 근거에 있나」, ⑤는 「근거가 법.db 에 있나」 다. 엉뚱한 조를 댄 것(글자는 맞는데 물음과 안 맞는 조)은 못 잰다.
@@ -24,6 +27,11 @@ import sys
 판단말 = ('안전하다', '안전합니다', '타당하다', '타당합니다', '권장', '바람직', '보는 것이 맞', '것으로 보인다', '것으로 판단')
 #: 결론ㆍ단서가 아닌 줄의 머리 — 여기부터는 ①② 를 재지 않는다
 안재는머리 = ('실무 조언', '원문이 정하지 않은', '⏸', '참고', '법.db 기준')
+#: ⑥ — 물음이 특정 건물ㆍ대지를 가리키는 말 / 결론이 사실로 갈리는 말
+특정건물 = re.compile(r'우리\s*(?:건물|건축물|대지|현장|사무실|가게|상가)|이\s*건물|해당\s*건물|저희|번지|이\s*대지|이\s*현장')
+갈림말 = re.compile(r'가른다|갈린다|따라\s*다르|경우에\s*따라')
+조건말 = re.compile(r'이면|라면|인\s*경우|일\s*때')
+문턱말 = re.compile(r'(?:\d[\d,.]*\s*[천만]?\s*(?:㎡|제곱미터|평|미터|m|층|개층|세대|대|명)|\d{4}\s*년[^←]{0,20}?)\s*(?:이상|미만|초과|이하|이전|이후|전|후)(?:이면|이라면|인\s*경우|일\s*때)')
 끝줄 = re.compile(r'법\.db 기준\s*[:：]')
 글귀꼴 = re.compile(r'←\s*「([^」]+)」')
 문장끝 = re.compile(r'다[.。](?:\*\*)?(?=\s|$|[←*])')
@@ -35,7 +43,7 @@ def 고르게(s):
     return re.sub(r'\s+', '', s)
 
 
-def 재기(답):
+def 재기(답, 물음=''):
     """걸린 것들을 글월 목록으로 낸다. 법률 문답 답이 아니면 None"""
     if not 끝줄.search(답):
         return None
@@ -65,16 +73,36 @@ def 재기(답):
                 걸림.append('② %d줄 ← 「%s」 — 이 글귀가 아래 근거 인용에 없다. 근거에 원문을 싣거나 글귀를 근거 그대로 고친다' % (번, g[:50]))
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import 법답원문
-    return 걸림 + 법답원문.원문대조(답)
+    걸림 += 법답원문.원문대조(답)
+    if 물음 and 특정건물.search(물음):
+        #: 굵은 결론들 — 한 결론 안에서 갈리거나(「~이면 …, ~이면 …」 「가른다」), 「~이면」 결론이 둘 이상이면 갈린 것이다
+        #  (T12 다시 풀기에서 굵은 결론을 「~이면 아니다」 「~이면 신고다」 두 줄로 쪼개 첫 잣대를 비껴갔다)
+        굵은 = re.findall(r'\*\*(.+?)\*\*', '\n'.join(줄들[:근거첫]))
+        조건 = [b for b in 굵은 if 조건말.search(b)]
+        갈린 = [b for b in 굵은 if 갈림말.search(b) or len(조건말.findall(b)) >= 2]
+        #: 결론ㆍ단서 어디든 「1천㎡ 이상이면」 「2018년 이전이면」 처럼 사실의 문턱에 건 갈림 — 물음에 없는 사실이다
+        #  (T12 세 번째 풀이는 1천㎡ 미만을 가정해 결론을 하나로 내고 갈림을 단서로 옮겼다)
+        문턱 = [l.strip() for l in 줄들[:근거첫] if 문턱말.search(l)]
+        if 갈린 or len(조건) >= 2 or 문턱:
+            보기 = (갈린 or (조건 if len(조건) >= 2 else 문턱))[0]
+            걸림.append('⑥ 결론 「%s」 이 사실로 갈린다 — 특정 건물을 물었으니 경우를 나눠 답하지 말고 그 사실(면적ㆍ허가일ㆍ용도지역 …)부터 묻는다. '
+                      '사용자가 「경우 나눠서」 라 했으면 그대로 낸다' % 보기[:50])
+    return 걸림
 
 
 def 마지막답(입력):
-    if 입력.get('last_assistant_message'):
-        return 입력['last_assistant_message']
+    """(마지막 답, 그 답을 부른 사람의 물음)"""
+    글, 물음 = [], ''
     길 = 입력.get('transcript_path')
-    if not 길 or not os.path.exists(길):
-        return ''
-    글 = []
+    if 길 and os.path.exists(길):
+        글, 물음 = 읽기(길)
+    if 입력.get('last_assistant_message'):
+        return 입력['last_assistant_message'], 물음
+    return '\n'.join(글), 물음
+
+
+def 읽기(길):
+    글, 물음 = [], ''
     for l in open(길, encoding='utf-8'):
         try:
             d = json.loads(l)
@@ -85,13 +113,14 @@ def 마지막답(입력):
             c = m.get('content')
             if isinstance(c, str) or (isinstance(c, list) and any(b.get('type') == 'text' for b in c if isinstance(b, dict))):
                 글 = []      #: 사람의 새 물음 — 그 뒤 답만 본다
+                물음 = c if isinstance(c, str) else ' '.join(b.get('text', '') for b in c if isinstance(b, dict) and b.get('type') == 'text')
         elif d.get('type') == 'assistant' and isinstance(m.get('content'), list):
             글 += [b.get('text', '') for b in m['content'] if isinstance(b, dict) and b.get('type') == 'text']
-    return '\n'.join(글)
+    return 글, 물음
 
 
 def 훅(입력):
-    걸림 = 재기(마지막답(입력))
+    걸림 = 재기(*마지막답(입력))
     if not 걸림:
         return 0
     글 = '법률 문답 대조에 걸렸다 (CLAUDE.md 「법률 문답」 3) —\n' + '\n'.join('  ' + g for g in 걸림)
@@ -108,7 +137,7 @@ def 자가검사():
     케이스 = yaml.safe_load(open(길, encoding='utf-8'))
     틀림 = 0
     for k in 케이스:
-        걸림 = 재기(k['답']) or []
+        걸림 = 재기(k['답'], k.get('물음', '')) or []
         걸린갈래 = sorted({g[0] for g in 걸림})
         바람 = sorted(k.get('걸릴것', []))
         맞음 = 걸린갈래 == 바람 and all(any(w in g for g in 걸림) for w in k.get('글월', []))
@@ -131,7 +160,8 @@ if __name__ == '__main__':
         입력 = None
     if isinstance(입력, dict):
         sys.exit(훅(입력))
-    걸림 = 재기(데이터)       #: 표준입력이 답 글 그대로
+    물음 = sys.argv[sys.argv.index('--물음') + 1] if '--물음' in sys.argv else ''
+    걸림 = 재기(데이터, 물음)       #: 표준입력이 답 글 그대로 · ⑥ 은 --물음 "<사람의 물음>" 을 줄 때만
     print('법률 문답 답이 아니다 (맨 끝 `법.db 기준:` 줄 없음)' if 걸림 is None else
           ('\n'.join(걸림) or '✔ 걸린 것 없음'))
     sys.exit(1 if 걸림 else 0)
