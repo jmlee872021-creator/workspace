@@ -9,7 +9,7 @@
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
 
 열쇠 — 클라우드 환경 「Default」 의 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET · GDRIVE_REFRESH_TOKEN.
-(보안 비밀번호를 환경변수 대신 「API 자격 증명」 Basic 머리글로 붙여도 돈다.) 다시 세우는 법: 드라이브 00_길잡이/클라우드_드라이브연결/
+(보안 비밀번호를 환경변수 대신 「API 자격 증명」 Basic 머리글로 붙여도 돈다.) 다시 세우는 법: 드라이브 「구글드라이브 api연결 (claude)」 폴더의 클라우드_드라이브연결.md
 사용자 본인 계정의 열쇠라 새 파일도 사용자 소유로 생긴다.
 
 ⚠ 지우지 않는다 — 드라이브에서도, 이 컴퓨터에서도. 바뀐 파일은 드라이브의 「버전」 에 옛 판이 남는다.
@@ -32,7 +32,8 @@ import urllib.request
 폴더꼴 = 'application/vnd.google-apps.folder'
 API = 'https://www.googleapis.com/drive/v3/files'
 올림API = 'https://www.googleapis.com/upload/drive/v3/files'
-뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', 목록이름]
+#: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
+뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름]
 큰것MB = 300
 
 
