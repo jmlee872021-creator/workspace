@@ -88,19 +88,44 @@ class 드라이브:
             if not 쪽:
                 return 파일
 
-    def 받기(self, fid, 길):
+    def 받기(self, fid, 길, 크기=None, 지문=None):
+        """끊기면 받은 데까지 이어 받는다 (Range).  크기ㆍmd5 가 드라이브와 맞아야 제자리에 놓는다.
+
+        연결이 중간에 끊겨도 read() 가 빈 값을 주며 조용히 끝날 수 있다 —
+        그래서 「다 받았다」 는 크기와 md5 로만 판단한다.
+        """
         os.makedirs(os.path.dirname(길), exist_ok=True)
         임 = 길 + '.받는중'
-        with self.부름('%s/%s?alt=media' % (API, fid)) as r, open(임, 'wb') as f:
-            while True:
-                b = r.read(1 << 20)
-                if not b:
-                    break
-                f.write(b)
+        if os.path.exists(임):
+            os.remove(임)
+        for 번 in range(6):
+            있음 = os.path.getsize(임) if os.path.exists(임) else 0
+            if 크기 and 있음 >= 크기:
+                break
+            try:
+                머리 = {'Range': 'bytes=%d-' % 있음} if 있음 else None
+                with self.부름('%s/%s?alt=media' % (API, fid), 머리=머리) as r:
+                    #: 서버가 Range 를 무시하고 처음부터 주면(200) 덮어쓴다
+                    with open(임, 'ab' if 있음 and r.status == 206 else 'wb') as f:
+                        while True:
+                            b = r.read(1 << 20)
+                            if not b:
+                                break
+                            f.write(b)
+            except (urllib.error.URLError, OSError) as e:
+                print('  · 끊김 (%s) — 이어 받는다: %s' % (e, 길), flush=True)
+            if not 크기:
+                break
+        받음 = os.path.getsize(임) if os.path.exists(임) else 0
+        if 크기 and 받음 != 크기:
+            raise SystemExit('✗ 다 못 받음 (%d / %d 바이트): %s' % (받음, 크기, 길))
+        if 지문 and md5(임) != 지문:
+            os.remove(임)
+            raise SystemExit('✗ md5 가 드라이브와 다르다 — 받은 것을 버렸다: %s' % 길)
         os.replace(임, 길)
 
     def 정보(self, fid):
-        with self.부름('%s/%s?fields=id,md5Checksum,modifiedTime' % (API, fid)) as r:
+        with self.부름('%s/%s?fields=id,md5Checksum,modifiedTime,size' % (API, fid)) as r:
             return json.load(r)
 
     def 올리기(self, 길, fid=None, 부모=None):
@@ -205,14 +230,14 @@ def 받기(args):
             훑기(x, 상대)
         else:
             if isinstance(x, str):
-                x = dict(d.정보(x), id=x, name=os.path.basename(상대), size=0)
+                x = dict(d.정보(x), id=x, name=os.path.basename(상대))
             넣기(x, 상대)
 
     print('받을 것 %d개 …' % len(할일), flush=True)
 
     def 하나(일):
         x, 길 = 일
-        d.받기(x['id'], os.path.join(여기, 길))
+        d.받기(x['id'], os.path.join(여기, 길), int(x.get('size') or 0) or None, x.get('md5Checksum'))
         return 길, {'id': x['id'], 'md5': x.get('md5Checksum'), '때': x['modifiedTime']}
 
     with concurrent.futures.ThreadPoolExecutor(8) as 일꾼:
