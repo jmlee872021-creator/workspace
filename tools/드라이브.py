@@ -8,8 +8,8 @@
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
 
-열쇠는 환경변수 셋에서 읽는다 — GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET · GDRIVE_REFRESH_TOKEN
-(사용자 본인 계정의 열쇠라 새 파일도 사용자 소유로 생긴다).
+열쇠 — 환경변수 GDRIVE_REFRESH_TOKEN + 보안 비밀번호(환경의 「API 자격 증명」 이 oauth2.googleapis.com 에 Basic 으로 붙인다,
+또는 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET). 사용자 본인 계정의 열쇠라 새 파일도 사용자 소유로 생긴다.
 
 ⚠ 지우지 않는다 — 드라이브에서도, 이 컴퓨터에서도. 바뀐 파일은 드라이브의 「버전」 에 옛 판이 남는다.
 ⚠ 받은 뒤 드라이브 쪽이 따로 바뀌었으면 그 파일은 올리지 않고 멈춘다 (덮어쓰기 막음).
@@ -36,14 +36,28 @@ API = 'https://www.googleapis.com/drive/v3/files'
 
 
 def 열쇠():
-    없음 = [k for k in ('GDRIVE_CLIENT_ID', 'GDRIVE_CLIENT_SECRET', 'GDRIVE_REFRESH_TOKEN') if not os.environ.get(k)]
-    if 없음:
-        raise SystemExit('✗ 드라이브 열쇠가 없다 — 프로젝트 설정의 환경변수에 %s 를 넣어야 한다' % ', '.join(없음))
-    몸 = urllib.parse.urlencode({
-        'client_id': os.environ['GDRIVE_CLIENT_ID'], 'client_secret': os.environ['GDRIVE_CLIENT_SECRET'],
-        'refresh_token': os.environ['GDRIVE_REFRESH_TOKEN'], 'grant_type': 'refresh_token'}).encode()
-    with urllib.request.urlopen('https://oauth2.googleapis.com/token', 몸, timeout=60) as r:
-        return json.load(r)['access_token']
+    """refresh token → 한 시간짜리 access token.
+
+    보안 비밀번호는 두 길로 받는다 —
+      ① 환경변수 GDRIVE_CLIENT_ID + GDRIVE_CLIENT_SECRET (몸에 싣는다)
+      ② 환경의 「API 자격 증명」 이 oauth2.googleapis.com 에 Basic(클라이언트 ID : 보안 비밀번호) 머리글을
+         붙여 준다 — 이 세션은 값을 못 본다. 이때는 몸에 refresh token 만 싣는다.
+    """
+    if not os.environ.get('GDRIVE_REFRESH_TOKEN'):
+        raise SystemExit('✗ 드라이브 열쇠가 없다 — 환경변수 GDRIVE_REFRESH_TOKEN 을 넣어야 한다')
+    몸 = {'refresh_token': os.environ['GDRIVE_REFRESH_TOKEN'], 'grant_type': 'refresh_token'}
+    if os.environ.get('GDRIVE_CLIENT_SECRET'):
+        몸.update(client_id=os.environ.get('GDRIVE_CLIENT_ID', ''), client_secret=os.environ['GDRIVE_CLIENT_SECRET'])
+    try:
+        with urllib.request.urlopen('https://oauth2.googleapis.com/token', urllib.parse.urlencode(몸).encode(), timeout=60) as r:
+            return json.load(r)['access_token']
+    except urllib.error.HTTPError as e:
+        글 = e.read()[:300].decode('utf-8', 'replace')
+        if 'invalid_grant' in 글:
+            raise SystemExit('✗ 열쇠가 끊겼다(7일 지남 또는 취소됨) — OAuth Playground 에서 Refresh token 을 다시 받아야 한다\n  ' + 글)
+        if 'invalid_client' in 글 or 'client_secret' in 글:
+            raise SystemExit('✗ 보안 비밀번호가 안 실렸다 — 「API 자격 증명」(oauth2.googleapis.com, Basic) 을 확인\n  ' + 글)
+        raise
 
 
 class 드라이브:
