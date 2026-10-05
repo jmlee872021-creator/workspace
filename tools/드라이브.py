@@ -4,6 +4,7 @@
     python3 tools/드라이브.py 받기                         뿌리 전체 (큰 파일ㆍ되돌림 사본은 뺀다)
     python3 tools/드라이브.py 받기 02_프로젝트/system_만들기  그 폴더만
     python3 tools/드라이브.py 받기 --큰것 10_Ai/1_법DB/법.db  큰 파일도 이름을 대면 받는다
+    python3 tools/드라이브.py 받기 --글만 10_Ai/10_업무매뉴얼  그림ㆍPDFㆍ한글 파일은 빼고 (32분 → 몇 분)
     python3 tools/드라이브.py 견주기                       받은 뒤 바뀐 것ㆍ새로 생긴 것만 보인다 (아무것도 안 올린다)
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
@@ -22,6 +23,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -35,6 +37,9 @@ API = 'https://www.googleapis.com/drive/v3/files'
 #: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
 뺄것 = ['되돌림_*', '__pycache__', '*.pyc', '.git', 'desktop.ini', '~$*', '구글드라이브 api연결*', 목록이름]
 큰것MB = 300
+#: `받기 --글만` 이 빼는 꼴 — 도구ㆍ매뉴얼 글(html·js·json·yaml·md·py·csv·db …)만 받으면 파일 수가 1/4 로 준다
+글아닌것 = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tif', '.tiff', '.webp', '.heic', '.pdf', '.hwp', '.hwpx',
+          '.dwg', '.dxf', '.zip', '.7z', '.rar', '.mp4', '.mov', '.psd', '.ai', '.pptx', '.ppt', '.rvt', '.rfa', '.$$$'}
 
 
 def 열쇠():
@@ -71,8 +76,19 @@ class 드라이브:
         h.update(머리 or {})
         if 길이 is not None:
             h['Content-Length'] = str(길이)
-        q = urllib.request.Request(주소, data=몸, method=방법, headers=h)
-        return urllib.request.urlopen(q, timeout=600)
+        for 번 in range(8):
+            q = urllib.request.Request(주소, data=몸, method=방법, headers=h)
+            try:
+                return urllib.request.urlopen(q, timeout=600)
+            except urllib.error.HTTPError as e:
+                글 = e.read()
+                e.read = lambda *_: 글
+                #: 구글은 1분에 부를 수 있는 횟수를 막는다(403 Quota exceeded · rateLimitExceeded · 429) — 기다렸다 다시 부른다
+                if 번 < 7 and (e.code in (429, 500, 502, 503, 504)
+                              or (e.code == 403 and any(x in 글 for x in (b'Quota exceeded', b'ateLimitExceeded')))):
+                    time.sleep(min(60, 2 ** 번 * 2))
+                    continue
+                raise
 
     def 목록(self, 부모):
         파일, 쪽 = [], None
@@ -168,24 +184,34 @@ def 경로id(d, m, 상대):
 
 def 받기(args):
     d, m = 드라이브(), 목록읽기()
-    할일, 큰것뺌 = [], []
+    할일, 큰것뺌, 글만뺌 = [], [], [0]
 
     def 훑기(fid, 상대):
-        for x in d.목록(fid):
-            이름 = x['name'].replace('/', '_')
-            길 = (상대 + '/' + 이름).lstrip('/')
-            if 빼나(이름) and not args.전부:
-                continue
-            if x['mimeType'] == 폴더꼴:
-                m['폴더'][길] = x['id']
-                훑기(x['id'], 길)
-            elif x['mimeType'].startswith('application/vnd.google-apps'):
-                continue          #: 구글 문서ㆍ시트ㆍ바로가기는 파일이 아니다
-            else:
-                넣기(x, 길)
+        """폴더 한 층씩 — 한 층의 폴더들은 여럿이 한꺼번에 훑는다 (폴더가 천 개 넘으면 한 줄로는 10분 걸린다)"""
+        층 = [(fid, 상대)]
+        with concurrent.futures.ThreadPoolExecutor(8) as 일꾼:
+            while 층:
+                다음 = []
+                for (_, 위), 안 in zip(층, 일꾼.map(lambda 칸: d.목록(칸[0]), 층)):
+                    for x in 안:
+                        이름 = x['name'].replace('/', '_')
+                        길 = (위 + '/' + 이름).lstrip('/')
+                        if 빼나(이름) and not args.전부:
+                            continue
+                        if x['mimeType'] == 폴더꼴:
+                            m['폴더'][길] = x['id']
+                            다음.append((x['id'], 길))
+                        elif x['mimeType'].startswith('application/vnd.google-apps'):
+                            continue          #: 구글 문서ㆍ시트ㆍ바로가기는 파일이 아니다
+                        else:
+                            넣기(x, 길)
+                층 = 다음
 
     def 넣기(x, 길):
         크기 = int(x.get('size') or 0)
+        if args.글만 and os.path.splitext(길)[1].lower() in 글아닌것:
+            글만뺌[0] += 1
+            return
         if 크기 > 큰것MB * 2 ** 20 and not args.큰것:
             큰것뺌.append((길, 크기))
             return
@@ -224,6 +250,8 @@ def 받기(args):
         pass
     목록쓰기(m)
     print('✔ 받음 — %s (파일 %d개 목록에 있음)' % (여기, len(m['파일'])))
+    if 글만뺌[0]:
+        print('  · --글만 — 그림ㆍPDFㆍ한글ㆍ캐드ㆍ압축 %d개는 안 받음' % 글만뺌[0])
     for 길, 크기 in 큰것뺌:
         print('  · 큰 파일이라 안 받음 (%.0f MB): %s — 필요하면 `받기 --큰것 %s`' % (크기 / 2 ** 20, 길, 길))
 
@@ -295,6 +323,7 @@ def main():
     b.add_argument('경로', nargs='*')
     b.add_argument('--큰것', action='store_true', help='%dMB 넘는 파일도 받는다' % 큰것MB)
     b.add_argument('--전부', action='store_true', help='되돌림 사본 등 빼던 것도 받는다')
+    b.add_argument('--글만', action='store_true', help='그림ㆍPDFㆍ한글ㆍ캐드ㆍ압축 파일은 빼고 받는다 (훨씬 빠르다)')
     sp.add_parser('견주기')
     o = sp.add_parser('올리기')
     o.add_argument('--정말', action='store_true')
