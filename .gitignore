@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+# 드라이브 스킬 사본 — SKILL.md 만 커밋한다 (references 등은 tools/스킬받기.sh 가 세션마다 받는다)
+.claude/skills/*/*
+!.claude/skills/*/SKILL.md
