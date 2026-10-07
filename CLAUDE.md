@@ -3,6 +3,13 @@
 드라이브 사본은 `~/Jakin_workspace` 에 있다 (`tools/드라이브.py` · README.md).
 드라이브의 큰 규칙은 `~/Jakin_workspace/CLAUDE.md` 에 있다 — 받아 두지 않았으면 `python3 tools/드라이브.py 받기 CLAUDE.md`.
 
+## 스킬 — 드라이브의 41개가 이 저장소에도 실린다 (2026-10-06 사용자)
+
+- `.claude/skills/` 는 드라이브 `Jakin_workspace/.claude/skills` 의 **사본**이다. SKILL.md 만 커밋돼 있고, 세션 시작 훅이 `tools/스킬받기.sh` 로 드라이브 최신과 references 를 맞춘다 (`/tmp/스킬받기.log`).
+- 그래서 PC 에서처럼 말에 걸리면 켜진다. 일을 짜기 전에 맞는 스킬부터 연다 — 법제처 OpenAPI 는 `law-download`, 대장ㆍ대지 공공데이터는 `site-info`. 어느 스킬인지 모르면 지도 스킬(`law-map` · `site-report-map` · `cad-work-map` · `revit-map` · `seumter-map` · `doc-form-map` · `common-tools-map`).
+- 스킬 본문의 경로는 드라이브 뿌리 기준이다 — 클라우드에서는 `~/Jakin_workspace/<경로>` 이고, 없으면 `python3 tools/드라이브.py 받기 <경로>`. 캐드ㆍRevitㆍ사람이 연 크롬이 필요한 스킬은 PC 전용이다.
+- 사본은 고치지 않는다 — 원본은 드라이브다. 스킬별 쓰임ㆍ열쇠 자리ㆍ열어야 할 호스트는 `/mnt/project-files/스킬색인.md`.
+
 ## 법률 문답 — 채팅으로 묻고, 법.db 를 근거로 답한다
 
 사용자는 건축 실무 전문가다. 이 세션 채팅창에서 법을 그때그때 묻는다 (2026-10-05 사용자).

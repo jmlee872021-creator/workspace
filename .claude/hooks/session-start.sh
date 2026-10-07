@@ -17,6 +17,10 @@ if [ -z "${GDRIVE_REFRESH_TOKEN:-}" ]; then
 fi
 echo "드라이브 열쇠 있음 — python3 tools/드라이브.py 받기 <폴더> 로 Jakin_workspace 를 받는다"
 
+# 드라이브의 스킬 41개를 이 저장소 .claude/skills 로 맞춘다 (사본은 커밋돼 있다 — 이것은 최신으로 맞추기)
+cd "$CLAUDE_PROJECT_DIR"
+nohup bash tools/스킬받기.sh > /tmp/스킬받기.log 2>&1 &
+
 # 법률 문답 준비 — 법.db(2.3GB) · 낱말.db(3GB) · 찾기 도구 · 업무매뉴얼 정본.  2분쯤 걸린다.
 # 세션을 막지 않게 뒤에서 받고, 다 되면 ~/Jakin_workspace/.법준비됨 을 남긴다 (CLAUDE.md 「법률 문답」).
 cd "$CLAUDE_PROJECT_DIR"
