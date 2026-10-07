@@ -10,5 +10,7 @@
 - `.claude/skills/` — 드라이브 스킬 41개의 사본(SKILL.md 만 커밋). `tools/스킬받기.sh` 가 세션마다 드라이브 최신으로 맞춘다 — 클라우드 세션에도 스킬이 실리게
 - `.claude/hooks/session-start.sh` — 클라우드 세션이 열릴 때 파이썬 꾸러미(pyyaml, pymupdf, pandas …)를 깔고 `스킬받기.sh` 와 `법준비.sh` 를 뒤에서 돌린다
 
+허용 도메인(네트워크): [`클라우드_허용도메인.md`](클라우드_허용도메인.md) — 환경을 다시 세팅할 때 그대로 붙여 넣는다.
+
 열쇠: 프로젝트 클라우드 환경의 환경변수 `GDRIVE_CLIENT_ID` · `GDRIVE_CLIENT_SECRET` · `GDRIVE_REFRESH_TOKEN`.
 받은 사본은 `~/Jakin_workspace` 에 생긴다 (도구들은 `.뿌리` 표식으로 뿌리를 찾아 G: 경로가 필요 없다).
