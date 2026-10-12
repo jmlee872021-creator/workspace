@@ -19,5 +19,6 @@
 2. 왼쪽 Step 1 에 `https://www.googleapis.com/auth/drive` 를 넣고 「Authorize APIs」 → 드라이브 주인 계정으로 허용.
 3. Step 2 「Exchange authorization code for tokens」 → **Refresh token** 을 복사한다.
 4. 클라우드 환경 설정(세션 제목줄의 환경 메뉴 → Edit)에서 `GDRIVE_REFRESH_TOKEN` 값을 바꾼다 → 새 세션부터 쓴다. 열쇠는 채팅창에 붙이지 않는다.
-- 7일마다 끊기는 까닭 — Google Cloud 콘솔의 「OAuth 동의 화면」 이 「테스트」 상태이면 Refresh token 이 7일 뒤 끊긴다. 「앱 게시(프로덕션)」 로 바꾸면 끊기지 않는다(본인만 쓰는 앱이면 확인 안 된 앱 경고만 한 번 뜬다).
+- Client ID · 보안 비밀번호는 드라이브 `Jakin_workspace/클라우드세션설정/구글드라이브 api연결 (claude)/환경변수.txt` (와 client_secret_….json)에 있다. 자세한 차례ㆍ「확인하지 않은 앱」 경고 넘기는 법은 같은 폴더 `클라우드_드라이브연결.md` 4 장.
+- 7일마다 끊기는 까닭 — 앱이 「테스트」 상태라서다. 「게시(프로덕션)」 로 바꾸면 끊기지 않지만, 게시 버튼이 브랜딩(홈페이지ㆍ개인정보처리방침 주소)을 채우기 전엔 막혀 있다(2026-10-05 · 아직 안 함).
 받은 사본은 `~/Jakin_workspace` 에 생긴다 (도구들은 `.뿌리` 표식으로 뿌리를 찾아 G: 경로가 필요 없다).
