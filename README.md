@@ -13,4 +13,11 @@
 허용 도메인(네트워크): [`클라우드_허용도메인.md`](클라우드_허용도메인.md) — 환경을 다시 세팅할 때 그대로 붙여 넣는다.
 
 열쇠: 프로젝트 클라우드 환경의 환경변수 `GDRIVE_CLIENT_ID` · `GDRIVE_CLIENT_SECRET` · `GDRIVE_REFRESH_TOKEN`.
+
+열쇠가 끊겼을 때(`invalid_grant` — 「7일 지남 또는 취소됨」) — Refresh token 만 다시 받는다 (2026-10-12):
+1. https://developers.google.com/oauthplayground → 오른쪽 위 톱니 → 「Use your own OAuth credentials」 에 Client ID · Client secret(환경변수와 같은 값, Google Cloud 콘솔 › API 및 서비스 › 사용자 인증 정보) 을 넣는다.
+2. 왼쪽 Step 1 에 `https://www.googleapis.com/auth/drive` 를 넣고 「Authorize APIs」 → 드라이브 주인 계정으로 허용.
+3. Step 2 「Exchange authorization code for tokens」 → **Refresh token** 을 복사한다.
+4. 클라우드 환경 설정(세션 제목줄의 환경 메뉴 → Edit)에서 `GDRIVE_REFRESH_TOKEN` 값을 바꾼다 → 새 세션부터 쓴다. 열쇠는 채팅창에 붙이지 않는다.
+- 7일마다 끊기는 까닭 — Google Cloud 콘솔의 「OAuth 동의 화면」 이 「테스트」 상태이면 Refresh token 이 7일 뒤 끊긴다. 「앱 게시(프로덕션)」 로 바꾸면 끊기지 않는다(본인만 쓰는 앱이면 확인 안 된 앱 경고만 한 번 뜬다).
 받은 사본은 `~/Jakin_workspace` 에 생긴다 (도구들은 `.뿌리` 표식으로 뿌리를 찾아 G: 경로가 필요 없다).
