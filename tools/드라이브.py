@@ -9,6 +9,9 @@
     python3 tools/드라이브.py 견주기                       받은 뒤 바뀐 것ㆍ새로 생긴 것만 보인다 (아무것도 안 올린다)
     python3 tools/드라이브.py 올리기                       올릴 것을 보이기만 한다
     python3 tools/드라이브.py 올리기 --정말                 그때 올린다 (사용자가 「올려」 라고 했을 때만)
+    python3 tools/드라이브.py 세기 02_프로젝트              아래 폴더마다 파일 수ㆍ크기를 센다 (아무것도 안 바꾼다)
+    python3 tools/드라이브.py 복사 <옛 폴더> <새 폴더>        폴더째 사본을 드라이브 안에서 짓는다 — 보이기만
+    python3 tools/드라이브.py 복사 --표 사본표.tsv --정말     표(옛 자리 ⇥ 새 자리)대로 그때 짓는다
 
 열쇠 — 클라우드 환경 「Default」 의 환경변수 GDRIVE_CLIENT_ID · GDRIVE_CLIENT_SECRET · GDRIVE_REFRESH_TOKEN.
 (보안 비밀번호를 환경변수 대신 「API 자격 증명」 Basic 머리글로 붙여도 돈다.) 다시 세우는 법: 드라이브 「구글드라이브 api연결 (claude)」 폴더의 클라우드_드라이브연결.md
@@ -33,6 +36,7 @@ import urllib.request
 여기 = os.path.expanduser(os.environ.get('JAKIN_DIR', '~/Jakin_workspace'))
 목록이름 = '.드라이브목록.json'
 폴더꼴 = 'application/vnd.google-apps.folder'
+바로가기꼴 = 'application/vnd.google-apps.shortcut'
 API = 'https://www.googleapis.com/drive/v3/files'
 올림API = 'https://www.googleapis.com/upload/drive/v3/files'
 #: `구글드라이브 api연결*` — 열쇠 파일(JSON 등)이 있을 수 있는 폴더라 받지 않는다
@@ -96,7 +100,7 @@ class 드라이브:
         파일, 쪽 = [], None
         while True:
             물음 = {'q': "'%s' in parents and trashed=false" % 부모, 'pageSize': 1000,
-                  'fields': 'nextPageToken,files(id,name,mimeType,md5Checksum,size,modifiedTime)'}
+                  'fields': 'nextPageToken,files(id,name,mimeType,md5Checksum,size,modifiedTime,shortcutDetails(targetId))'}
             if 쪽:
                 물음['pageToken'] = 쪽
             with self.부름(API + '?' + urllib.parse.urlencode(물음)) as r:
@@ -164,6 +168,18 @@ class 드라이브:
         몸 = json.dumps({'name': 이름, 'mimeType': 폴더꼴, 'parents': [부모]}).encode()
         with self.부름(API + '?fields=id', 'POST', 몸, {'Content-Type': 'application/json; charset=UTF-8'}) as r:
             return json.load(r)['id']
+
+    def 사본(self, x, 부모):
+        """드라이브 서버 안에서 복사한다 (내려받지 않는다).  바로가기는 같은 곳을 가리키는 새 바로가기를 짓는다"""
+        if x['mimeType'] == 바로가기꼴:
+            몸 = {'name': x['name'], 'mimeType': 바로가기꼴, 'parents': [부모],
+                 'shortcutDetails': {'targetId': x.get('shortcutDetails', {}).get('targetId')}}
+            주소 = API + '?fields=id,md5Checksum'
+        else:
+            몸 = {'name': x['name'], 'parents': [부모]}
+            주소 = '%s/%s/copy?fields=id,md5Checksum' % (API, x['id'])
+        with self.부름(주소, 'POST', json.dumps(몸).encode(), {'Content-Type': 'application/json; charset=UTF-8'}) as r:
+            return json.load(r)
 
 
 def 빼나(이름):
@@ -374,6 +390,151 @@ def 올리기(args):
         sys.exit(1)
 
 
+def 다훑기(d, fid, 상대=''):
+    """폴더 아래를 끝까지 — (폴더 상대경로 목록, [(파일, 상대경로)]).  한 층의 폴더들은 8 이 한꺼번에 훑는다"""
+    폴더들, 파일들, 층 = [], [], [(fid, 상대)]
+    with concurrent.futures.ThreadPoolExecutor(8) as 일꾼:
+        while 층:
+            다음 = []
+            for (_, 위), 안 in zip(층, 일꾼.map(lambda 칸: d.목록(칸[0]), 층)):
+                for x in 안:
+                    길 = (위 + '/' + x['name'].replace('/', '_')).lstrip('/')
+                    if x['mimeType'] == 폴더꼴:
+                        폴더들.append(길)
+                        다음.append((x['id'], 길))
+                    else:
+                        파일들.append((x, 길))
+            층 = 다음
+    return 폴더들, 파일들
+
+
+def 크기글(b):
+    for 단위 in ('B', 'KB', 'MB', 'GB'):
+        if b < 1024 or 단위 == 'GB':
+            return ('%.0f %s' if 단위 in ('B', 'KB') else '%.1f %s') % (b, 단위)
+        b /= 1024
+
+
+def 세기(args):
+    """폴더마다 바로 아래 칸의 파일 수ㆍ크기 — 사본 만들기 표의 밑감"""
+    d, m = 드라이브(), 목록읽기()
+    for 상대 in (args.경로 or ['']):
+        상대 = 상대.strip('/')
+        fid, 폴더인가 = 경로id(d, m, 상대) if 상대 else (뿌리ID, True)
+        if not 폴더인가:
+            raise SystemExit('✗ 폴더가 아니다: %s' % 상대)
+        _, 파일들 = 다훑기(d, fid)
+        칸 = {}
+        for x, 길 in 파일들:
+            머리 = 길.split('/')[0] if '/' in 길 else '(맨 위 낱 파일)'
+            n, b = 칸.get(머리, (0, 0))
+            칸[머리] = (n + 1, b + int(x.get('size') or 0))
+        print('\n## %s — 파일 %d개 · %s' % (상대 or 'Jakin_workspace', len(파일들),
+                                        크기글(sum(int(x.get('size') or 0) for x, _ in 파일들))))
+        print('칸\t파일 수\t크기')
+        for 머리 in sorted(칸):
+            print('%s\t%d\t%s' % (머리, 칸[머리][0], 크기글(칸[머리][1])))
+
+
+def 폴더보장(d, m, 상대, 지음):
+    """`a/b/c` 폴더 id — 없는 층은 짓는다(지음=True 일 때만, 아니면 None)"""
+    부모, 지금 = 뿌리ID, ''
+    for 이름 in [x for x in 상대.split('/') if x]:
+        지금 = (지금 + '/' + 이름).lstrip('/')
+        if 지금 not in m['폴더']:
+            있음 = [x for x in d.목록(부모) if x['name'] == 이름 and x['mimeType'] == 폴더꼴]
+            if 있음:
+                m['폴더'][지금] = 있음[0]['id']
+            elif 지음:
+                m['폴더'][지금] = d.폴더짓기(이름, 부모)
+            else:
+                return None
+        부모 = m['폴더'][지금]
+    return 부모
+
+
+def 복사(args):
+    """옛 폴더를 새 자리에 그대로 사본으로 짓는다 — 원본은 건드리지 않는다.
+
+    드라이브엔 폴더째 복사가 없다: 폴더는 새로 짓고, 파일은 하나씩 서버 안에서 복사한다(하나에 약 4초 → 8 이 함께).
+    새 자리에 같은 이름이 이미 있으면 건너뛴다 — 끊겼을 때 같은 줄을 다시 돌리면 이어서 한다.
+    """
+    if args.표:
+        쌍 = []
+        with open(args.표, encoding='utf-8') as f:
+            for 줄 in f:
+                칸 = [x.strip() for x in 줄.rstrip('\n').split('\t')]
+                if not 줄.strip() or 줄.lstrip().startswith('#') or len(칸) < 2 or not 칸[0] or not 칸[1]:
+                    continue
+                쌍.append((칸[0].strip('/'), 칸[1].strip('/')))
+    elif len(args.경로) == 2:
+        쌍 = [(args.경로[0].strip('/'), args.경로[1].strip('/'))]
+    else:
+        raise SystemExit('✗ `복사 <옛 자리> <새 자리>` 또는 `복사 --표 사본표.tsv`')
+    d, m = 드라이브(), {'파일': {}, '폴더': {'': 뿌리ID}}
+    일, 모두수, 모두크기 = [], 0, 0
+    for 옛, 새 in 쌍:
+        x, 폴더인가 = 경로id(d, m, 옛)
+        if 폴더인가:
+            폴더들, 파일들 = 다훑기(d, x)
+        else:
+            if isinstance(x, str):
+                x = dict(d.정보(x), id=x, name=os.path.basename(옛))
+            폴더들, 파일들 = [], [(dict(x, name=os.path.basename(새)), '')]
+        크기 = sum(int(f.get('size') or 0) for f, _ in 파일들)
+        모두수, 모두크기 = 모두수 + len(파일들), 모두크기 + 크기
+        print('%s → %s\t폴더 %d · 파일 %d · %s' % (옛, 새, len(폴더들), len(파일들), 크기글(크기)), flush=True)
+        일.append((옛, 새, 폴더인가, 폴더들, 파일들))
+    print('모두 파일 %d개 · %s · 어림 %.0f분 (파일 하나 4초, 8 이 함께)' % (모두수, 크기글(모두크기), 모두수 * 4 / 8 / 60))
+    if not args.정말:
+        print('\n(보이기만 했다 — 지으려면 --정말)')
+        return
+
+    본것, 됨, 건넘, 틀림 = {}, [0], [0], []
+
+    def 안의이름(부모):
+        if 부모 not in 본것:
+            본것[부모] = {x['name'] for x in d.목록(부모)}
+        return 본것[부모]
+
+    할일 = []
+    for 옛, 새, 폴더인가, 폴더들, 파일들 in 일:
+        뿌리 = 폴더보장(d, m, 새 if 폴더인가 else os.path.dirname(새), True)
+        자리 = {'': 뿌리}
+        for 길 in 폴더들:          #: 위층부터 나온다 (다훑기가 층 차례로 모은다)
+            위, 이름 = os.path.dirname(길), os.path.basename(길)
+            있음 = [x for x in d.목록(자리[위]) if x['name'].replace('/', '_') == 이름 and x['mimeType'] == 폴더꼴]
+            자리[길] = 있음[0]['id'] if 있음 else d.폴더짓기(이름, 자리[위])
+        for f, 길 in 파일들:
+            부모 = 자리[os.path.dirname(길)] if 폴더인가 else 뿌리
+            할일.append((f, 부모, (새 + '/' + 길) if 길 else 새))
+
+    for 부모 in {부모 for _, 부모, _ in 할일}:
+        안의이름(부모)
+
+    def 하나(칸):
+        f, 부모, 길 = 칸
+        if f['name'] in 본것[부모]:
+            건넘[0] += 1
+            return
+        try:
+            d.사본(f, 부모)
+            됨[0] += 1
+        except urllib.error.HTTPError as e:
+            틀림.append((길, '%s %s' % (e.code, e.read()[:200].decode('utf-8', 'replace'))))
+
+    시작 = time.time()
+    with concurrent.futures.ThreadPoolExecutor(args.일꾼) as 일꾼:
+        for i, _ in enumerate(일꾼.map(하나, 할일), 1):
+            if i % 100 == 0:
+                print('  %d / %d (%.0f초)' % (i, len(할일), time.time() - 시작), flush=True)
+    print('✔ 사본 — 지음 %d · 이미 있어 건넘 %d · 못함 %d · %.0f초' % (됨[0], 건넘[0], len(틀림), time.time() - 시작))
+    for 길, 왜 in 틀림:
+        print('  ✘', 길, '—', 왜)
+    if 틀림:
+        sys.exit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest='일', required=True)
@@ -386,8 +547,15 @@ def main():
     sp.add_parser('견주기')
     o = sp.add_parser('올리기')
     o.add_argument('--정말', action='store_true')
+    s = sp.add_parser('세기')
+    s.add_argument('경로', nargs='*')
+    c = sp.add_parser('복사')
+    c.add_argument('경로', nargs='*', help='<옛 자리> <새 자리> (드라이브 뿌리 기준)')
+    c.add_argument('--표', help='옛 자리 ⇥ 새 자리 를 한 줄에 하나씩 적은 tsv (# 줄은 건너뛴다)')
+    c.add_argument('--정말', action='store_true')
+    c.add_argument('--일꾼', type=int, default=8, help='한꺼번에 복사할 수 (기본 8)')
     args = ap.parse_args()
-    {'받기': 받기, '견주기': 견주기, '올리기': 올리기}[args.일](args)
+    {'받기': 받기, '견주기': 견주기, '올리기': 올리기, '세기': 세기, '복사': 복사}[args.일](args)
 
 
 if __name__ == '__main__':
